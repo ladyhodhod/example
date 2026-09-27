@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Attention by hand: queries, keys and values</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F6F7F3; --surface:#FDFDFB; --sunk:#E8EDF4; --ink:#131B30; --soft:#4A5468; --line:#D5DBE5;
+  --blue:#2F5FC4; --blue-t:#DCE5F7; --orange:#E0782A; --orange-d:#A64C10; --orange-t:#FBE3CF;
+  --good:#23704A; --good-t:#DCEFE3; --bad:#B3261E; --bad-t:#F8DEDB;
+  --head:'Space Grotesk', Arial, sans-serif; --body:'IBM Plex Sans', Arial, sans-serif; --mono:'JetBrains Mono','Courier New',monospace;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10172A; --surface:#182139; --sunk:#1F2A45; --ink:#EEF1F7; --soft:#AEB8CC; --line:#2C3754;
+    --blue:#8FB0F0; --blue-t:#22335C; --orange:#F08A3C; --orange-d:#F3A566; --orange-t:#3D2A1C;
+    --good:#6FD39B; --good-t:#173A29; --bad:#FF8A80; --bad-t:#46201E;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10172A; --surface:#182139; --sunk:#1F2A45; --ink:#EEF1F7; --soft:#AEB8CC; --line:#2C3754;
+  --blue:#8FB0F0; --blue-t:#22335C; --orange:#F08A3C; --orange-d:#F3A566; --orange-t:#3D2A1C;
+  --good:#6FD39B; --good-t:#173A29; --bad:#FF8A80; --bad-t:#46201E;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--body); font-size:17px; line-height:1.55}
+.wrap{max-width:1080px; margin:0 auto; padding:28px 20px 64px}
+h1{font-family:var(--head); font-size:clamp(30px,5vw,46px); line-height:1.08; letter-spacing:-.02em; margin:0 0 10px}
+h2{font-family:var(--head); font-size:clamp(23px,3.2vw,30px); line-height:1.15; margin:0 0 8px; letter-spacing:-.01em}
+h3{font-family:var(--head); font-size:19px; margin:0 0 6px}
+p{margin:0 0 12px; max-width:72ch}
+.lede{color:var(--soft); font-size:18px}
+.mono{font-family:var(--mono)}
+.muted{color:var(--soft)}
+small,.small{font-size:14px}
+
+/* stepper */
+nav.steps{display:flex; gap:6px; margin:26px 0 22px; overflow-x:auto; padding-bottom:4px}
+nav.steps button{flex:1 0 auto; font:600 15px var(--body); color:var(--soft); background:transparent; border:1px solid var(--line); border-radius:999px; padding:9px 16px; cursor:pointer; white-space:nowrap}
+nav.steps button .n{font-family:var(--mono); margin-right:6px}
+nav.steps button[aria-current="step"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+nav.steps button.done:not([aria-current="step"]){color:var(--ink); border-color:var(--blue)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--orange); outline-offset:2px}
+
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:22px}
+.stack{display:flex; flex-direction:column; gap:18px}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+@media (max-width:800px){.grid2{grid-template-columns:1fr}}
+
+/* the sentence stage — the one bold element */
+.stage{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:8px 0 18px; overflow-x:auto}
+.stage-inner{position:relative; display:inline-block; min-width:100%; padding:0 22px}
+.stage svg{position:absolute; left:0; top:0; pointer-events:none; overflow:visible}
+.sentence{display:flex; gap:10px; white-space:nowrap; padding-top:150px; font-family:var(--head); font-size:clamp(20px,2.6vw,27px)}
+.w{padding:4px 2px; color:var(--soft)}
+.w.t{color:var(--ink); border-bottom:3px solid var(--blue-t); font-weight:600}
+.w.it{color:var(--bg); background:var(--orange-d); border-radius:8px; padding:4px 10px; border:none}
+.stage-cap{padding:10px 22px 0; color:var(--soft); font-size:14px}
+
+/* sliders */
+.sliders{display:grid; grid-template-columns:repeat(5,1fr); gap:14px}
+@media (max-width:760px){.sliders{grid-template-columns:1fr 1fr}}
+.sl{background:var(--sunk); border-radius:14px; padding:14px}
+.sl label{display:flex; justify-content:space-between; font-weight:600}
+.sl .pct{font-family:var(--mono); color:var(--orange-d)}
+input[type=range]{width:100%; accent-color:var(--orange)}
+
+.btnrow{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+.btn{font:600 16px var(--body); border-radius:12px; padding:11px 18px; cursor:pointer; border:1px solid var(--line); background:var(--surface); color:var(--ink)}
+.btn.primary{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+.btn.ghost{background:transparent}
+
+/* tables */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse; width:100%; font-size:16px}
+th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); white-space:nowrap}
+th{font-weight:600; color:var(--soft); font-size:14px}
+td.num,th.num{text-align:right; font-family:var(--mono)}
+td input{width:96px; font:500 16px var(--mono); padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); text-align:right}
+td input.ok{border-color:var(--good); background:var(--good-t)}
+td input.no{border-color:var(--bad); background:var(--bad-t)}
+.status{font-size:14px; font-weight:600}
+.status.ok{color:var(--good)} .status.no{color:var(--bad)}
+tr.hl td{background:var(--orange-t)}
+
+.vec{font-family:var(--mono); background:var(--sunk); border-radius:6px; padding:2px 7px; white-space:nowrap}
+.vec.q{background:var(--orange-t); color:var(--orange-d); font-weight:600}
+
+.trio{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+@media (max-width:760px){.trio{grid-template-columns:1fr}}
+.trio > div{background:var(--sunk); border-radius:14px; padding:16px}
+.trio b{font-family:var(--head); font-size:18px; display:block; margin-bottom:4px}
+
+/* bars */
+.bars{display:flex; flex-direction:column; gap:12px}
+.bar-row{display:grid; grid-template-columns:78px 1fr 58px; gap:10px; align-items:center}
+.bar-row .lbl{font-weight:600}
+.bar-row .v{font-family:var(--mono); font-size:15px; text-align:right}
+.track{height:14px; background:var(--sunk); border-radius:7px; position:relative; overflow:hidden}
+.fill{position:absolute; left:0; top:0; bottom:0; border-radius:7px; transition:width .25s ease}
+.fill.model{background:var(--orange)}
+.fill.guess{background:var(--blue)}
+.pair .track{height:10px}
+.pair{display:flex; flex-direction:column; gap:4px}
+.legend{display:flex; gap:18px; font-size:14px; color:var(--soft)}
+.legend span::before{content:""; display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--c)}
+
+.note{background:var(--blue-t); border-radius:14px; padding:14px 16px}
+.note p:last-child{margin-bottom:0}
+.formula{font-family:var(--mono); font-size:15px; background:var(--sunk); padding:10px 14px; border-radius:10px; display:inline-block}
+
+/* playground */
+.ctrl{display:flex; flex-direction:column; gap:14px}
+.ctrl .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:12px; overflow:hidden}
+.seg button{font:600 15px var(--body); border:none; background:transparent; color:var(--soft); padding:9px 14px; cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink); color:var(--bg)}
+select{font:500 16px var(--body); padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink)}
+.challenges{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+@media (max-width:860px){.challenges{grid-template-columns:1fr}}
+.ch{border:1px solid var(--line); border-radius:14px; padding:16px; background:var(--surface); display:flex; flex-direction:column; gap:8px}
+.ch.won{border-color:var(--good); background:var(--good-t)}
+.ch .badge{font:600 14px var(--body); color:var(--soft)}
+.ch.won .badge{color:var(--good)}
+.ch p{margin:0; font-size:15.5px}
+details summary{cursor:pointer; font-weight:600; color:var(--blue)}
+.plot svg{width:100%; max-width:360px; height:auto; display:block}
+ol.disc li{margin-bottom:8px}
+@media (prefers-reduced-motion: reduce){.fill{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Attention by hand</h1>
+    <p class="lede">When a model reads the word “it”, it has to decide which earlier words help explain it. You’ll make that decision yourself, then check it with the same arithmetic a Transformer uses: queries, keys and values.</p>
+  </header>
+
+  <nav class="steps" aria-label="Activity steps">
+    <button data-go="0"><span class="n">1</span>Guess</button>
+    <button data-go="1"><span class="n">2</span>Scores</button>
+    <button data-go="2"><span class="n">3</span>Weights</button>
+    <button data-go="3"><span class="n">4</span>Values</button>
+    <button data-go="4"><span class="n">5</span>Experiment</button>
+  </nav>
+
+  <!-- STEP 1 -->
+  <section class="step stack" data-step="0">
+    <div>
+      <h2>Step 1 · Where should “it” look?</h2>
+      <p>Move the sliders to show how much attention “it” should pay to each highlighted word. The arcs grow as you give a word more attention. There are no wrong answers yet.</p>
+    </div>
+    <div class="stage" id="stage1"></div>
+    <div class="sliders" id="guessSliders"></div>
+    <div class="btnrow"><button class="btn primary" data-next>Lock in my guess</button><span class="muted small">Your percentages always add up to 100%.</span></div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="step stack" data-step="1" hidden>
+    <div>
+      <h2>Step 2 · Score each word: query · key</h2>
+      <p>Every word carries three small lists of numbers (vectors). Think of a library:</p>
+    </div>
+    <div class="trio">
+      <div><b>Query</b>What “it” is looking for. Like the question you type into the library search.</div>
+      <div><b>Key</b>What each word advertises about itself. Like the label on a book’s spine.</div>
+      <div><b>Value</b>The information a word hands over if chosen. Like the book’s contents.</div>
+    </div>
+    <div class="note">
+      <p>Our vectors have only two numbers, and each number has a meaning: <span class="vec">[prey, predator]</span> — how much a word is about the hunted animal, and how much about the hunter. Real models use hundreds of numbers, and nobody chooses what they mean — training does.</p>
+    </div>
+    <p>The query of “it” is <span class="vec q" id="qShow"></span>. A word scores high when its key points the same way as the query. Multiply matching positions and add them up (the <b>dot product</b>):</p>
+    <p><span class="formula">[a, b] · [c, d] = a×c + b×d &nbsp;&nbsp; e.g. [1, 3] · [2, 0.5] = 2 + 1.5 = 3.5</span></p>
+    <div class="panel tbl-wrap">
+      <table id="scoreTable"><thead><tr><th>Word</th><th>Key</th><th class="num">Your score</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="btnrow">
+      <button class="btn" id="checkScores">Check my scores</button>
+      <button class="btn ghost" id="revealScores">Show the answers</button>
+      <button class="btn primary" data-next>Continue to weights</button>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="step stack" data-step="2" hidden>
+    <div>
+      <h2>Step 3 · Turn scores into weights (softmax)</h2>
+      <p>Scores can be any number. To get attention weights we need positive numbers that add up to 100%. Softmax does that in two moves: raise <i>e</i> ≈ 2.718 to the power of each score (bigger scores get much bigger), then divide by the total.</p>
+    </div>
+    <div class="panel tbl-wrap">
+      <table id="softTable"><thead><tr><th>Word</th><th class="num">Score</th><th class="num">e<sup>score</sup></th><th class="num">÷ total = weight</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="grid2">
+      <div class="panel stack">
+        <h3>Your guess vs. the model</h3>
+        <div class="legend"><span style="--c:var(--blue)">Your guess</span><span style="--c:var(--orange)">Attention (softmax)</span></div>
+        <div class="bars" id="compareBars"></div>
+      </div>
+      <div class="panel">
+        <h3>Talk to your neighbour</h3>
+        <p>Where does your guess differ most from the model?</p>
+        <p>Softmax exaggerates differences: a score of 4.25 versus 2.5 becomes roughly 70 versus 12. Why might it be useful for attention to be this decisive?</p>
+      </div>
+    </div>
+    <div class="stage" id="stage3"></div>
+    <div class="btnrow"><button class="btn primary" data-next>Continue to values</button></div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="step stack" data-step="3" hidden>
+    <div>
+      <h2>Step 4 · Collect the values</h2>
+      <p>Attention decides <i>how much</i> to take from each word; the values are <i>what</i> gets taken. The new meaning of “it” is a mix of the values, weighted by attention.</p>
+    </div>
+    <div class="grid2">
+      <div class="panel tbl-wrap">
+        <table id="valueTable"><thead><tr><th>Word</th><th class="num">Weight</th><th>Value</th><th>Weight × value</th></tr></thead><tbody></tbody><tfoot></tfoot></table>
+      </div>
+      <div class="panel plot stack">
+        <h3>The new “it”, on the meaning map</h3>
+        <div id="plot4"></div>
+        <p class="small muted">Blue arrows are the values of each word (thicker = more attention). The orange arrow is the output: what “it” means after attention.</p>
+      </div>
+    </div>
+    <div class="note"><p id="interp4"></p></div>
+    <div class="btnrow"><button class="btn primary" data-next>Start experimenting</button></div>
+  </section>
+
+  <!-- STEP 5 -->
+  <section class="step stack" data-step="4" hidden>
+    <div>
+      <h2>Step 5 · Take the controls</h2>
+      <p>Now change the vectors yourself and watch attention react. Try the three challenges below; each one turns green when you’ve solved it.</p>
+    </div>
+    <div class="stage" id="stage5"></div>
+    <div class="grid2">
+      <div class="panel ctrl">
+        <div>
+          <h3>Sentence</h3>
+          <div class="seg" role="group" aria-label="Last word">
+            <button data-sent="scared">…was scared</button><button data-sent="hungry">…was hungry</button>
+          </div>
+        </div>
+        <div>
+          <h3>Query of “it” <span class="vec q" id="qLive"></span></h3>
+          <div class="row2">
+            <label>prey <input type="range" id="q0" min="-3" max="3" step="0.1"></label>
+            <label>predator <input type="range" id="q1" min="-3" max="3" step="0.1"></label>
+          </div>
+        </div>
+        <div>
+          <h3>Key of <select id="keyWord"></select> <span class="vec" id="kLive"></span></h3>
+          <div class="row2">
+            <label>prey <input type="range" id="k0" min="-3" max="3" step="0.1"></label>
+            <label>predator <input type="range" id="k1" min="-3" max="3" step="0.1"></label>
+          </div>
+        </div>
+        <div class="btnrow"><button class="btn" id="resetQ">Reset query</button><button class="btn" id="resetK">Reset keys</button></div>
+      </div>
+      <div class="panel stack">
+        <h3>Attention from “it”</h3>
+        <div class="bars" id="liveBars"></div>
+        <div class="plot" id="plot5"></div>
+        <p class="small muted" id="interp5"></p>
+      </div>
+    </div>
+    <div class="challenges" id="challenges"></div>
+    <div class="panel">
+      <h3>Discussion</h3>
+      <ol class="disc">
+        <li>In Challenge 1 you changed the <b>query</b>; in Challenge 3 the <b>key</b>. In your own words, what is the difference?</li>
+        <li>In a real model, nobody sets these numbers by hand. Where do they come from? (Hint: the learning loop from Part 1.)</li>
+        <li>Real Transformers run dozens of attention “heads” at once, each with its own queries and keys. What different things might different heads look for?</li>
+      </ol>
+      <p class="small muted">Simplified for learning: real models also divide scores by √(vector length) before softmax, use hundreds of dimensions per vector, and compute queries, keys and values from the word embeddings with learned weights.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+const TRACK = ['mouse','hid','cat','it','LAST'];
+const BASE_WORDS = ['The','mouse','hid','from','the','cat','because','it','was'];
+const Q0 = [2, 0.5];
+const KEYS0 = {mouse:[2,0.5], hid:[0.5,1], cat:[0.5,2], it:[1,1], scared:[1,0.2], hungry:[0.2,1]};
+const VALS = {mouse:[1,0], hid:[0.3,0.3], cat:[0,1], it:[0.4,0.4], scared:[0.8,0.1], hungry:[0.1,0.8]};
+
+const S = {
+  step:0, maxStep:0,
+  guess:{mouse:5, hid:1, cat:2, it:1, LAST:2},
+  inputs:{},
+  play:{sent:'scared', q:[...Q0], keys:JSON.parse(JSON.stringify(KEYS0)), keyWord:'cat'},
+  won:{}
+};
+try{ const saved = JSON.parse(localStorage.getItem('attn-activity-v2')||'null'); if(saved){ Object.assign(S, saved); } }catch(e){}
+function save(){ try{ localStorage.setItem('attn-activity-v2', JSON.stringify(S)); }catch(e){} }
+
+const lastOf = s => s;
+const trackedWords = sent => TRACK.map(t => t==='LAST' ? sent : t);
+const fmt = (x,d=2) => (Math.round(x*Math.pow(10,d))/Math.pow(10,d)).toFixed(d).replace(/^-0\.00$/,'0.00');
+const vs = v => '[' + v.map(x => +x.toFixed(2)).join(', ') + ']';
+const dot = (a,b) => a[0]*b[0] + a[1]*b[1];
+
+function attend(sent, q, keys){
+  const ws = trackedWords(sent);
+  const scores = ws.map(w => dot(q, keys[w]));
+  const exps = scores.map(s => Math.exp(s));
+  const tot = exps.reduce((a,b)=>a+b,0);
+  const weights = exps.map(e => e/tot);
+  const out = [0,0];
+  ws.forEach((w,i)=>{ out[0]+=weights[i]*VALS[w][0]; out[1]+=weights[i]*VALS[w][1]; });
+  return {ws, scores, exps, tot, weights, out};
+}
+function guessWeights(){
+  const vals = TRACK.map(t => +S.guess[t]);
+  const tot = vals.reduce((a,b)=>a+b,0) || 1;
+  return vals.map(v => v/tot);
+}
+
+/* ---------- sentence stage with arcs ---------- */
+function buildStage(el, sent){
+  const words = BASE_WORDS.concat([sent + '.']);
+  el.innerHTML = '<div class="stage-inner"><svg aria-hidden="true"></svg><div class="sentence"></div></div><p class="stage-cap"></p>';
+  const row = el.querySelector('.sentence');
+  words.forEach((w,i) => {
+    const s = document.createElement('span');
+    const clean = w.replace('.','');
+    s.textContent = w;
+    const last = i===words.length-1;
+    s.className = 'w' + (clean==='it' && i===7 ? ' it' : '') + ((['mouse','hid','cat'].includes(clean) || last) ? ' t' : '');
+    if(i===7) s.dataset.tok='it-self';
+    if(['mouse','hid','cat'].includes(clean)) s.dataset.tok = clean;
+    if(last) s.dataset.tok = 'LAST';
+    row.appendChild(s);
+  });
+}
+function drawArcs(el, weights, color){
+  const inner = el.querySelector('.stage-inner'); if(!inner) return;
+  const svg = inner.querySelector('svg');
+  const box = inner.getBoundingClientRect();
+  svg.setAttribute('width', box.width); svg.setAttribute('height', 160);
+  const itEl = inner.querySelector('[data-tok="it-self"]');
+  const ib = itEl.getBoundingClientRect();
+  const x0 = ib.left - box.left + ib.width/2, y0 = ib.top - box.top - 4;
+  let paths = '';
+  const map = {mouse:0, hid:1, cat:2, LAST:4};
+  Object.keys(map).forEach(tok => {
+    const t = inner.querySelector('[data-tok="'+tok+'"]'); if(!t) return;
+    const tb = t.getBoundingClientRect();
+    const x1 = tb.left - box.left + tb.width/2, y1 = tb.top - box.top - 4;
+    const w = weights[map[tok]];
+    const h = Math.min(140, 30 + Math.abs(x1-x0)*0.28);
+    const cx = (x0+x1)/2, cy = Math.min(y0,y1) - h;
+    paths += `<path d="M ${x0} ${y0} Q ${cx} ${cy} ${x1} ${y1}" fill="none" stroke="${color}" stroke-linecap="round" stroke-width="${(1.5 + w*16).toFixed(1)}" opacity="${(0.25 + w*0.75).toFixed(2)}"/>`;
+    paths += `<text x="${cx}" y="${Math.min(y0,y1) - h/2 - 8 - w*8}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="600" fill="${color}">${Math.round(w*100)}%</text>`;
+  });
+  // self-attention loop
+  const ws = weights[3];
+  paths += `<path d="M ${x0-8} ${y0} C ${x0-26} ${y0-46}, ${x0+26} ${y0-46}, ${x0+8} ${y0}" fill="none" stroke="${color}" stroke-linecap="round" stroke-width="${(1.5 + ws*16).toFixed(1)}" opacity="${(0.25 + ws*0.75).toFixed(2)}"/>`;
+  svg.innerHTML = paths;
+  el.querySelector('.stage-cap').textContent = 'Arcs from “it”: thicker = more attention. The small loop is “it” attending to itself. Words without an arc are left out to keep the maths small.';
+}
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+/* ---------- step 1 ---------- */
+function renderGuess(){
+  const g = guessWeights();
+  const box = document.getElementById('guessSliders');
+  if(!box.dataset.built){
+    box.innerHTML = TRACK.map((t,i) => {
+      const name = t==='LAST' ? 'scared' : t;
+      return `<div class="sl"><label for="g-${t}"><span>${name}</span><span class="pct" id="gp-${t}"></span></label><input type="range" id="g-${t}" min="0" max="10" step="1" value="${S.guess[t]}" aria-label="Attention to ${name}"></div>`;
+    }).join('');
+    TRACK.forEach(t => document.getElementById('g-'+t).addEventListener('input', e => { S.guess[t] = +e.target.value; save(); renderGuess(); }));
+    box.dataset.built = 1;
+  }
+  TRACK.forEach((t,i) => document.getElementById('gp-'+t).textContent = Math.round(g[i]*100)+'%');
+  drawArcs(document.getElementById('stage1'), g, cssVar('--blue'));
+}
+
+/* ---------- step 2 ---------- */
+function renderScores(){
+  document.getElementById('qShow').textContent = vs(Q0);
+  const tb = document.querySelector('#scoreTable tbody');
+  if(!tb.dataset.built){
+    tb.innerHTML = trackedWords('scared').map(w => `<tr><td><b>${w}</b></td><td><span class="vec">${vs(KEYS0[w])}</span></td><td class="num"><input inputmode="decimal" id="in-${w}" aria-label="Score for ${w}" value="${S.inputs[w] ?? ''}"></td><td><span class="status" id="st-${w}"></span></td></tr>`).join('');
+    trackedWords('scared').forEach(w => document.getElementById('in-'+w).addEventListener('input', e => { S.inputs[w] = e.target.value; save(); }));
+    tb.dataset.built = 1;
+  }
+}
+function checkScores(){
+  const r = attend('scared', Q0, KEYS0);
+  let right = 0;
+  r.ws.forEach((w,i) => {
+    const inp = document.getElementById('in-'+w), st = document.getElementById('st-'+w);
+    const v = parseFloat(String(inp.value).replace(',','.'));
+    const ok = !isNaN(v) && Math.abs(v - r.scores[i]) < 0.051;
+    inp.classList.toggle('ok', ok); inp.classList.toggle('no', !ok);
+    st.className = 'status ' + (ok ? 'ok' : 'no');
+    const q = Q0, k = KEYS0[w];
+    st.textContent = ok ? 'Correct' : (isNaN(v) ? 'Enter a number' : `Try ${q[0]}×${k[0]} + ${q[1]}×${k[1]}`);
+    if(ok) right++;
+  });
+  return right;
+}
+
+/* ---------- step 3 ---------- */
+function renderSoft(){
+  const r = attend('scared', Q0, KEYS0);
+  const maxI = r.weights.indexOf(Math.max(...r.weights));
+  document.querySelector('#softTable tbody').innerHTML = r.ws.map((w,i) =>
+    `<tr class="${i===maxI?'hl':''}"><td><b>${w}</b></td><td class="num">${fmt(r.scores[i],1)}</td><td class="num">${fmt(r.exps[i],2)}</td><td class="num">${fmt(r.exps[i],2)} ÷ ${fmt(r.tot,2)} = <b>${Math.round(r.weights[i]*100)}%</b></td></tr>`
+  ).join('') + `<tr><td class="muted">Total</td><td></td><td class="num">${fmt(r.tot,2)}</td><td class="num">100%</td></tr>`;
+  const g = guessWeights();
+  document.getElementById('compareBars').innerHTML = r.ws.map((w,i) => `
+    <div class="bar-row"><span class="lbl">${w}</span>
+      <div class="pair"><div class="track"><div class="fill guess" style="width:${g[i]*100}%"></div></div><div class="track"><div class="fill model" style="width:${r.weights[i]*100}%"></div></div></div>
+      <span class="v">${Math.round(g[i]*100)} / ${Math.round(r.weights[i]*100)}</span></div>`).join('');
+  drawArcs(document.getElementById('stage3'), r.weights, cssVar('--orange'));
+}
+
+/* ---------- plot ---------- */
+function plot(el, r){
+  const O = {x:46, y:300}, sc = 230;
+  const X = v => O.x + v*sc, Y = v => O.y - v*sc;
+  const blue = cssVar('--blue'), orange = cssVar('--orange'), soft = cssVar('--soft'), line = cssVar('--line'), ink = cssVar('--ink');
+  let s = `<svg viewBox="0 0 360 340" role="img" aria-label="Value vectors and the attention output on a two-dimensional map"><defs>
+    <marker id="hb${el.id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${blue}"/></marker>
+    <marker id="ho${el.id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${orange}"/></marker></defs>`;
+  for(let t=0.25;t<=1.1;t+=0.25){ s += `<line x1="${X(0)}" y1="${Y(t)}" x2="${X(1.15)}" y2="${Y(t)}" stroke="${line}"/><line x1="${X(t)}" y1="${Y(0)}" x2="${X(t)}" y2="${Y(1.15)}" stroke="${line}"/>`; }
+  s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(1.18)}" y2="${Y(0)}" stroke="${soft}" stroke-width="1.5"/><line x1="${X(0)}" y1="${Y(0)}" x2="${X(0)}" y2="${Y(1.18)}" stroke="${soft}" stroke-width="1.5"/>`;
+  s += `<text x="${X(1.15)}" y="${Y(0)+24}" text-anchor="end" font-size="13" fill="${soft}" font-family="IBM Plex Sans, Arial">prey →</text>`;
+  s += `<text x="${X(0)-10}" y="${Y(1.15)-8}" font-size="13" fill="${soft}" font-family="IBM Plex Sans, Arial">↑ predator</text>`;
+  r.ws.forEach((w,i) => {
+    const v = VALS[w];
+    s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(v[0])}" y2="${Y(v[1])}" stroke="${blue}" stroke-width="${(1+r.weights[i]*6).toFixed(1)}" opacity="${(0.35+r.weights[i]*0.65).toFixed(2)}" marker-end="url(#hb${el.id})"/>`;
+    const lx = X(v[0]) + (v[0] > v[1] ? 6 : 8), ly = Y(v[1]) + (v[0] > v[1] ? -8 : 4);
+    s += `<text x="${lx}" y="${ly}" font-size="13" font-weight="600" fill="${ink}" font-family="IBM Plex Sans, Arial">${w}</text>`;
+  });
+  s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(r.out[0])}" y2="${Y(r.out[1])}" stroke="${orange}" stroke-width="5" stroke-linecap="round" marker-end="url(#ho${el.id})"/>`;
+  s += `<circle cx="${X(r.out[0])}" cy="${Y(r.out[1])}" r="5" fill="${orange}"/>`;
+  s += `<text x="${X(r.out[0])+10}" y="${Y(r.out[1])-10}" font-size="14" font-weight="700" fill="${orange}" font-family="IBM Plex Sans, Arial">new “it”</text></svg>`;
+  el.innerHTML = s;
+}
+function interpret(r){
+  const [a,b] = r.out;
+  const o = `<span class="vec">${vs(r.out)}</span>`;
+  if(a > b*1.6) return `The new “it” is ${o}: mostly <b>prey</b>. The model now reads “it” as the mouse.`;
+  if(b > a*1.6) return `The new “it” is ${o}: mostly <b>predator</b>. The model now reads “it” as the cat.`;
+  return `The new “it” is ${o}: a blend of <b>prey</b> and <b>predator</b>. The model hasn’t decided what “it” refers to.`;
+}
+
+/* ---------- step 4 ---------- */
+function renderValues(){
+  const r = attend('scared', Q0, KEYS0);
+  document.querySelector('#valueTable tbody').innerHTML = r.ws.map((w,i) =>
+    `<tr><td><b>${w}</b></td><td class="num">${fmt(r.weights[i])}</td><td><span class="vec">${vs(VALS[w])}</span></td><td><span class="vec">[${fmt(r.weights[i]*VALS[w][0])}, ${fmt(r.weights[i]*VALS[w][1])}]</span></td></tr>`).join('');
+  document.querySelector('#valueTable tfoot').innerHTML = `<tr><td colspan="3"><b>Sum = output for “it”</b></td><td><span class="vec q">[${fmt(r.out[0])}, ${fmt(r.out[1])}]</span></td></tr>`;
+  plot(document.getElementById('plot4'), r);
+  document.getElementById('interp4').innerHTML = interpret(r);
+}
+
+/* ---------- step 5 ---------- */
+const CHALLENGES = [
+  {id:'c1', title:'Challenge 1 · It was hungry',
+   text:'Switch the sentence to “…was hungry”. The hungry one is the hunter, so “it” must be the cat. Change only the <b>query</b> until “cat” gets at least 60% of the attention.',
+   hint:'The cat’s key is [0.5, 2]. A query that cares about “predator” and not “prey” points the same way.',
+   test:(r,P)=> P.sent==='hungry' && keysAreOriginal(P) && r.weights[2] >= 0.6},
+  {id:'c2', title:'Challenge 2 · Undecided',
+   text:'Make “it” spread its attention almost evenly: every word between 15% and 25%.',
+   hint:'If the query is all zeros, every score is 0. What does softmax do with equal scores?',
+   test:(r)=> r.weights.every(w => w >= 0.15 && w <= 0.25)},
+  {id:'c3', title:'Challenge 3 · Change the label, not the question',
+   text:'Back to “…was scared”, with the <b>original query</b> [2, 0.5] (press Reset query). Now edit the <b>key</b> of “cat” so that cat wins the most attention.',
+   hint:'The mouse scores 4.25. With this query, the “prey” number of a key counts four times more than its “predator” number.',
+   test:(r,P)=> P.sent==='scared' && Math.abs(P.q[0]-Q0[0])<0.001 && Math.abs(P.q[1]-Q0[1])<0.001 && r.weights[2] === Math.max(...r.weights)}
+];
+function keysAreOriginal(P){ return Object.keys(KEYS0).every(k => P.keys[k][0]===KEYS0[k][0] && P.keys[k][1]===KEYS0[k][1]); }
+
+function syncControls(){
+  const P = S.play;
+  document.querySelectorAll('[data-sent]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sent===P.sent)));
+  const ws = trackedWords(P.sent);
+  if(!ws.includes(P.keyWord)) P.keyWord = P.sent;
+  const sel = document.getElementById('keyWord');
+  sel.innerHTML = ws.map(w => `<option value="${w}" ${w===P.keyWord?'selected':''}>${w}</option>`).join('');
+  document.getElementById('q0').value = P.q[0]; document.getElementById('q1').value = P.q[1];
+  document.getElementById('k0').value = P.keys[P.keyWord][0]; document.getElementById('k1').value = P.keys[P.keyWord][1];
+}
+function renderPlay(){
+  const P = S.play;
+  const r = attend(P.sent, P.q, P.keys);
+  document.getElementById('qLive').textContent = vs(P.q);
+  document.getElementById('kLive').textContent = vs(P.keys[P.keyWord]);
+  const maxI = r.weights.indexOf(Math.max(...r.weights));
+  document.getElementById('liveBars').innerHTML = r.ws.map((w,i) => `
+    <div class="bar-row"><span class="lbl">${w}</span><div class="track"><div class="fill model" style="width:${r.weights[i]*100}%"></div></div><span class="v">${Math.round(r.weights[i]*100)}%</span></div>`).join('')
+    + `<p class="small muted" style="margin:4px 0 0">Scores: ${r.ws.map((w,i)=>`${w} ${fmt(r.scores[i],1)}`).join(' · ')}</p>`;
+  plot(document.getElementById('plot5'), r);
+  document.getElementById('interp5').innerHTML = interpret(r);
+  const stage = document.getElementById('stage5');
+  if(stage.dataset.sent !== P.sent){ buildStage(stage, P.sent); stage.dataset.sent = P.sent; }
+  drawArcs(stage, r.weights, cssVar('--orange'));
+  document.getElementById('challenges').innerHTML = CHALLENGES.map(c => {
+    if(c.test(r,P)) S.won[c.id] = true;
+    const won = !!S.won[c.id];
+    return `<div class="ch ${won?'won':''}"><span class="badge">${won?'Solved':'Not solved yet'}</span><h3>${c.title}</h3><p>${c.text}</p><details><summary>Hint</summary><p>${c.hint}</p></details></div>`;
+  }).join('');
+  save();
+}
+
+/* ---------- navigation ---------- */
+function show(n){
+  S.step = n; S.maxStep = Math.max(S.maxStep, n); save();
+  document.querySelectorAll('.step').forEach(s => s.hidden = (+s.dataset.step !== n));
+  document.querySelectorAll('nav.steps button').forEach(b => {
+    const i = +b.dataset.go;
+    if(i===n) b.setAttribute('aria-current','step'); else b.removeAttribute('aria-current');
+    b.classList.toggle('done', i < S.maxStep || (i<=S.maxStep && i!==n));
+  });
+  renderAll();
+  window.scrollTo({top:0, behavior:'instant' in window ? 'instant' : 'auto'});
+}
+function renderAll(){
+  if(S.step===0) renderGuess();
+  if(S.step===1) renderScores();
+  if(S.step===2) renderSoft();
+  if(S.step===3) renderValues();
+  if(S.step===4){ syncControls(); renderPlay(); }
+}
+
+buildStage(document.getElementById('stage1'), 'scared');
+buildStage(document.getElementById('stage3'), 'scared');
+document.querySelectorAll('nav.steps button').forEach(b => b.addEventListener('click', () => show(+b.dataset.go)));
+document.querySelectorAll('[data-next]').forEach(b => b.addEventListener('click', () => show(S.step+1)));
+document.getElementById('checkScores').addEventListener('click', checkScores);
+document.getElementById('revealScores').addEventListener('click', () => {
+  const r = attend('scared', Q0, KEYS0);
+  r.ws.forEach((w,i) => { S.inputs[w] = String(+r.scores[i].toFixed(2)); document.getElementById('in-'+w).value = S.inputs[w]; });
+  save(); checkScores();
+});
+document.querySelectorAll('[data-sent]').forEach(b => b.addEventListener('click', () => { S.play.sent = b.dataset.sent; syncControls(); renderPlay(); }));
+['q0','q1'].forEach((id,i) => document.getElementById(id).addEventListener('input', e => { S.play.q[i] = +(+e.target.value).toFixed(1); renderPlay(); }));
+['k0','k1'].forEach((id,i) => document.getElementById(id).addEventListener('input', e => { S.play.keys[S.play.keyWord][i] = +(+e.target.value).toFixed(1); renderPlay(); }));
+document.getElementById('keyWord').addEventListener('change', e => { S.play.keyWord = e.target.value; syncControls(); renderPlay(); });
+document.getElementById('resetQ').addEventListener('click', () => { S.play.q = [...Q0]; syncControls(); renderPlay(); });
+document.getElementById('resetK').addEventListener('click', () => { S.play.keys = JSON.parse(JSON.stringify(KEYS0)); syncControls(); renderPlay(); });
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderAll, 120); });
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(renderAll);
+show(S.step || 0);
+})();
+</script>
+</body>
+</html>
